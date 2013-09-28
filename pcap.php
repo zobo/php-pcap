@@ -57,6 +57,7 @@ class pcap_file_reader
 			var_dump($buf);
 			var_dump($head);die("0???\n");
 		}
+		$head['count'] = $this->count++;
 		$head['data'] = fread($this->f, $head['incl_len']);
 		return $head;
 	}
