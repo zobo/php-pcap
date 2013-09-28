@@ -8,12 +8,19 @@ class pcap_file_reader
 	private $u32 = "V";
 	private $u16 = "v";
 	private $global_header;
+	private $count;
 
 	function open($file)
 	{
 		$this->f = fopen($file, "r");
 		$r = $this->read_global_header();
+		$this->count = 1;
 		return $r;
+	}
+
+	function close()
+	{
+		fclose($this->f);
 	}
 
 	private function read_global_header()
@@ -103,11 +110,6 @@ class pcap_file_writer
 
 
 
-function cut_sip($data)
-{
-	if (strlen($data)<14+20+8) return false;
-	return substr($data,14+20+8);
-}
 function parse_sip($data)
 {
 	$lines = explode("\r\n", $data);
@@ -124,27 +126,36 @@ function parse_sip($data)
 
 function cut_ip($data)
 {
-	return substr($data,14,20);
+	return substr($data,14);
 }
+
+function parse_ethframe($data)
+{
+	$x = unpack("nethertype", substr($data,12,2));
+	$x['destination_mac'] = bin2hex(substr($data,0,6));
+	$x['source_mac'] = bin2hex(substr($data,6,6));
+	$x['data'] = substr($data,14);
+	return $x;
+}
+
 function parse_ip($data)
 {
 	$x = unpack("Cversion_ihl/Cservices/nlength/nidentification/nflags_offset/Cttl/Cprotocol/nchecksum/Nsource/Ndestination", $data);
 	$x['version'] = $x['version_ihl'] >> 4;
-	$x['version'] = $x['version_ihl'] & 0xf;
+	$x['ihl'] = $x['version_ihl'] & 0xf;
+	unset($x['version_ihl']);
 	$x['flags'] = $x['flags_offset'] >> 13;
 	$x['offset'] = $x['flags_offset'] & 0x1fff;
 	$x['source_ip'] = long2ip($x['source']);
 	$x['destination_ip'] = long2ip($x['destination']);
+	$x['data'] = substr($data,$x['ihl']*4,$x['length']-$x['ihl']*4); // ignoring options
 	return $x;
 }
 
-function cut_udp($data)
-{
-	return substr($data,14+20,8);
-}
 function parse_udp($data)
 {
 	$x = unpack("nsource_port/ndestination_port/nlength/nchecksum",$data);
+	$x['data'] = substr($data,8,$x['length']-8);
 	return $x;
 }
 
@@ -158,5 +169,26 @@ function get_media_port($dict)
 	}
 	return false;
 }
+
+
+function parse_tcp($data)
+{
+	$x = unpack("nsource_port/ndestination_port/Nseq/Nack/Ctmp1/Ctmp2/nwindow/nchecksum/nurgent", $data);
+	$x['offset'] = ($x['tmp1']>>4)&0xf;
+	$x['flag_NS'] = ($x['tmp1']&0x01) != 0;
+	$x['flag_CWR'] = ($x['tmp2']&0x80) != 0;
+	$x['flag_ECE'] = ($x['tmp2']&0x40) != 0;
+	$x['flag_URG'] = ($x['tmp2']&0x20) != 0;
+	$x['flag_ACK'] = ($x['tmp2']&0x10) != 0;
+	$x['flag_PSH'] = ($x['tmp2']&0x08) != 0;
+	$x['flag_RST'] = ($x['tmp2']&0x04) != 0;
+	$x['flag_SYN'] = ($x['tmp2']&0x02) != 0;
+	$x['flag_FIN'] = ($x['tmp2']&0x01) != 0;
+	unset($x['tmp1']);
+	unset($x['tmp2']);
+	$x['data'] = substr($data, 4*$x['offset']);
+	return $x;
+}
+
 
 

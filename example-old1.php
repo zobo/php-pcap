@@ -13,6 +13,7 @@ $r = $p->open($argv[1]);
 
 while ($s = $p->read_packet())
 {
-	$ip = parse_ip(cut_ip($s['data']));
+	$eth = parse_ethframe($s['data']);
+	$ip = parse_ip($eth['data']);
 	echo date("H:i:s", $s['ts_sec']).".".$s['ts_usec']." ".$ip['source_ip']." > ".$ip['destination_ip']."\n";
 }
